@@ -4,7 +4,9 @@ import (
 	"net/http"
     "github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	"github.com/rapptive/task"
+	"github.com/jinzhu/gorm"
+	"github.com/rapptive/nyx"
+    _ "github.com/jinzhu/gorm/dialects/mysql"
 )
 
 type rapptiveRouter struct {
@@ -14,6 +16,26 @@ type rapptiveRouter struct {
 
 func (r *rapptiveRouter) run() {
 	r.router.Run(r.port)
+}
+
+var db *gorm.DB
+
+func init() {
+	// Open a db connection
+	var err error
+	conn := nyx.Connection{
+		User: "rapptive",
+		Pw: "test",
+		Db: "rapptive",
+	}
+
+	db, err = conn.Open();
+	if err != nil {
+		panic("failed to connect database")
+	}
+
+	// Migrate the schema
+	db.AutoMigrate(&RapptiveTask{})
 }
 
 func main() {
@@ -30,11 +52,12 @@ func main() {
 	// This handler is responsible for task creation
 	router.POST("/tasks", func(c *gin.Context) {
         // Get JSON request and create Task
-        var task task.RapptiveTask
-        if err := c.ShouldBindJSON(&task); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
+        task := RapptiveTask{
+			TaskSubject: c.PostForm("subject"),
+			TaskContent: c.PostForm("content"),
 		}
+
+		db.Save(&task);
 
 		c.JSON(http.StatusOK, task)
 	})
@@ -60,4 +83,10 @@ func main() {
 	})
 
 	router.Run(":8080")
+}
+
+type RapptiveTask struct {
+	gorm.Model
+	TaskSubject string `json:"subject"`
+	TaskContent string `json:"content"`
 }
